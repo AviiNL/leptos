@@ -36,7 +36,6 @@ use leptos_router::*;
 use once_cell::sync::OnceCell;
 use parking_lot::RwLock;
 use std::{io, pin::Pin, sync::Arc, thread::available_parallelism};
-use tokio::task::LocalSet;
 use tokio_util::task::LocalPoolHandle;
 use tracing::Instrument;
 /// A struct to hold the parts of the incoming Request. Since `http::Request` isn't cloneable, we're forced
@@ -1007,13 +1006,13 @@ where
 /// create routes in Axum's Router without having to use wildcard matching or fallbacks. Takes in your root app Element
 /// as an argument so it can walk you app tree. This version is tailored to generate Axum compatible paths.
 #[tracing::instrument(level = "trace", fields(error), skip_all)]
-pub async fn generate_route_list<IV>(
+pub fn generate_route_list<IV>(
     app_fn: impl FnOnce(Scope) -> IV + 'static,
 ) -> Vec<RouteListing>
 where
     IV: IntoView + 'static,
 {
-    generate_route_list_with_exclusions(app_fn, None).await
+    generate_route_list_with_exclusions(app_fn, None)
 }
 
 /// Generates a list of all routes defined in Leptos's Router in your app. We can then use this to automatically
@@ -1021,7 +1020,7 @@ where
 /// as an argument so it can walk you app tree. This version is tailored to generate Axum compatible paths. Adding excluded_routes
 /// to this function will stop `.leptos_routes()` from generating a route for it, allowing a custom handler. These need to be in Axum path format
 #[tracing::instrument(level = "trace", fields(error), skip_all)]
-pub async fn generate_route_list_with_exclusions<IV>(
+pub fn generate_route_list_with_exclusions<IV>(
     app_fn: impl FnOnce(Scope) -> IV + 'static,
     excluded_routes: Option<Vec<String>>,
 ) -> Vec<RouteListing>
@@ -1034,20 +1033,26 @@ where
     let routes = Routes::default();
     let routes_inner = routes.clone();
 
-    let local = LocalSet::new();
-    // Run the local task set.
+    {
+        let routes = leptos_router::generate_route_list_inner(app_fn);
+        let mut writable = routes_inner.0.write();
+        *writable = routes;
+    }
 
-    local
-        .run_until(async move {
-            tokio::task::spawn_local(async move {
-                let routes = leptos_router::generate_route_list_inner(app_fn);
-                let mut writable = routes_inner.0.write();
-                *writable = routes;
-            })
-            .await
-            .unwrap();
-        })
-        .await;
+    // let local = LocalSet::new();
+    // // Run the local task set.
+
+    // local
+    //     .run_until(async move {
+    //         tokio::task::spawn_local(async move {
+    //             let routes = leptos_router::generate_route_list_inner(app_fn);
+    //             let mut writable = routes_inner.0.write();
+    //             *writable = routes;
+    //         })
+    //         .await
+    //         .unwrap();
+    //     })
+    //     .await;
 
     let routes = routes.0.read().to_owned();
     // Axum's Router defines Root routes as "/" not ""

@@ -140,7 +140,7 @@ pub fn Html(
             }
 
             if let Some(attributes) = attributes {
-                let attributes = attributes.get();
+                let attributes = attributes.get_untracked();
                 for (attr_name, attr_value) in attributes.into_iter() {
                     let el = el.clone();
                     let attr_name = attr_name.to_owned();

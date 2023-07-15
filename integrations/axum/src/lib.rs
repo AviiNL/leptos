@@ -334,9 +334,14 @@ async fn handle_server_fns_inner(
                 Response::builder().status(StatusCode::BAD_REQUEST).body(
                     Full::from(format!(
                         "Could not find a server function at the route \
-                         {fn_name}. \n\nIt's likely that you need to call \
+                         {fn_name}. \n\nIt's likely that either 
+                         1. The API prefix you specify in the `#[server]` \
+                         macro doesn't match the prefix at which your server \
+                         function handler is mounted, or \n2. You are on a \
+                         platform that doesn't support automatic server \
+                         function registration and you need to call \
                          ServerFn::register_explicit() on the server function \
-                         type, somewhere in your `main` function."
+                         type, somewhere in your `main` function.",
                     )),
                 )
             }
@@ -687,8 +692,11 @@ async fn forward_stream(
     let mut shell = Box::pin(bundle);
     let first_app_chunk = shell.next().await.unwrap_or_default();
 
-    let (head, tail) =
-        html_parts_separated(options, use_context::<MetaContext>(cx).as_ref());
+    let (head, tail) = html_parts_separated(
+        cx,
+        options,
+        use_context::<MetaContext>(cx).as_ref(),
+    );
 
     _ = tx.send(head).await;
     _ = tx.send(first_app_chunk).await;
@@ -822,6 +830,8 @@ fn provide_contexts(
     provide_context(cx, extractor);
     provide_context(cx, default_res_options);
     provide_server_redirect(cx, move |path| redirect(cx, path));
+    #[cfg(feature = "nonce")]
+    leptos::nonce::provide_nonce(cx);
 }
 
 /// Returns an Axum [Handler](axum::handler::Handler) that listens for a `GET` request and tries
